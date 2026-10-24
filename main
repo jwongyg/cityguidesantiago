@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Santiago City Guide — Neighbourhoods</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #0e0e0e; color: #f0ece4; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  header { padding: 13px 24px 11px; border-bottom: 0.5px solid rgba(255,255,255,0.1); display: flex; align-items: baseline; gap: 16px; flex-shrink: 0; background: #0e0e0e; }
+  header h1 { font-family: 'Playfair Display', Georgia, serif; font-size: 17px; font-weight: 400; letter-spacing: 0.02em; }
+  header .sub { font-size: 11px; color: rgba(240,236,228,0.38); letter-spacing: 0.09em; text-transform: uppercase; }
+  .legend-pills { display: flex; gap: 10px; margin-left: auto; align-items: center; }
+  .pill { display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: rgba(240,236,228,0.5); letter-spacing: 0.04em; }
+  .pill-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .pill-sq { width: 8px; height: 8px; border-radius: 2px; }
+
+  .layout { display: flex; flex: 1; overflow: hidden; }
+  #map { flex: 1; height: 100%; }
+  .panel { width: 336px; flex-shrink: 0; display: flex; flex-direction: column; border-left: 0.5px solid rgba(255,255,255,0.1); background: #111; overflow: hidden; }
+
+  .nblist { flex-shrink: 0; border-bottom: 0.5px solid rgba(255,255,255,0.1); }
+  .nbtn { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 14px; background: transparent; border: none; border-bottom: 0.5px solid rgba(255,255,255,0.06); cursor: pointer; text-align: left; transition: background 0.12s; }
+  .nbtn:last-child { border-bottom: none; }
+  .nbtn:hover, .nbtn.active { background: rgba(255,255,255,0.05); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .bname { font-size: 12.5px; font-weight: 400; color: #f0ece4; }
+  .btag { font-size: 11px; color: rgba(240,236,228,0.35); margin-left: auto; white-space: nowrap; }
+
+  .writeup { flex: 1; padding: 18px 18px 22px; overflow-y: auto; }
+  .wu-eyebrow { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(240,236,228,0.3); margin-bottom: 7px; }
+  .wu-name { font-family: 'Playfair Display', Georgia, serif; font-size: 20px; font-weight: 400; color: #f0ece4; margin-bottom: 3px; line-height: 1.2; }
+  .wu-tag { font-size: 11.5px; color: rgba(240,236,228,0.38); margin-bottom: 14px; letter-spacing: 0.03em; }
+  .wu-divider { border: none; border-top: 0.5px solid rgba(255,255,255,0.1); margin-bottom: 14px; }
+  .wu-body { font-family: 'Playfair Display', Georgia, serif; font-size: 13.5px; line-height: 1.85; color: rgba(240,236,228,0.8); }
+  .wu-placeholder { font-family: 'Inter', sans-serif; font-size: 12.5px; line-height: 1.7; color: rgba(240,236,228,0.28); font-style: italic; }
+
+  /* Neighbourhood markers */
+  .nh-marker { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Playfair Display', Georgia, serif; font-size: 11px; font-weight: 500; color: white; cursor: pointer; border: 2px solid rgba(255,255,255,0.3); transition: transform 0.15s, border-color 0.15s; box-shadow: 0 2px 12px rgba(0,0,0,0.6); }
+  .nh-marker.active { transform: scale(1.25); border-color: white; }
+
+  /* Place pins — small diamond shape */
+  .place-pin { width: 0; height: 0; position: relative; cursor: pointer; }
+  .place-pin-inner { width: 11px; height: 11px; border-radius: 2px; transform: rotate(45deg); border: 1.5px solid rgba(255,255,255,0.5); box-shadow: 0 1px 6px rgba(0,0,0,0.7); transition: transform 0.12s; }
+  .place-pin:hover .place-pin-inner { transform: rotate(45deg) scale(1.4); }
+
+  /* Category badge inside diamond */
+  .cat-arch .place-pin-inner { border-style: solid; }
+  .cat-hotel .place-pin-inner { border-style: dashed; }
+  .cat-culture .place-pin-inner { border-style: dotted; border-width: 2px; }
+
+  /* Custom Leaflet popup */
+  .leaflet-popup-content-wrapper {
+    background: rgba(16,16,16,0.97);
+    border: 0.5px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    box-shadow: 0 6px 28px rgba(0,0,0,0.7);
+    padding: 0;
+    max-width: 270px;
+  }
+  .leaflet-popup-content { margin: 0; color: #f0ece4; }
+  .leaflet-popup-tip-container { display: none; }
+  .leaflet-popup-close-button { color: rgba(240,236,228,0.4) !important; top: 8px !important; right: 10px !important; font-size: 15px !important; }
+
+  .pop-header { padding: 12px 14px 10px; border-bottom: 0.5px solid rgba(255,255,255,0.1); }
+  .pop-cat { font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; font-weight: 500; }
+  .pop-name { font-family: 'Playfair Display', Georgia, serif; font-size: 15px; font-weight: 400; line-height: 1.2; color: #f0ece4; }
+  .pop-body { padding: 10px 14px 12px; font-family: 'Playfair Display', Georgia, serif; font-size: 12.5px; line-height: 1.75; color: rgba(240,236,228,0.78); }
+  .pop-warn { margin-top: 8px; font-family: 'Inter', sans-serif; font-size: 10.5px; color: rgba(240,200,100,0.7); font-style: italic; }
+
+  /* NH popup */
+  .nh-popup-content-wrapper {
+    background: rgba(16,16,16,0.97);
+    border: 0.5px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  }
+
+  .layer-toggle { position: absolute; bottom: 24px; left: 12px; z-index: 1000; display: flex; gap: 6px; }
+  .ltbtn { padding: 5px 11px; font-family: 'Inter', sans-serif; font-size: 10.5px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; background: rgba(14,14,14,0.88); color: rgba(240,236,228,0.55); border: 0.5px solid rgba(255,255,255,0.18); border-radius: 4px; cursor: pointer; backdrop-filter: blur(4px); transition: all 0.12s; }
+  .ltbtn:hover { color: #f0ece4; border-color: rgba(255,255,255,0.4); }
+  .ltbtn.active { background: rgba(240,236,228,0.1); color: #f0ece4; border-color: rgba(255,255,255,0.45); }
+
+  /* Category filter buttons */
+  .cat-filters { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; gap: 6px; }
+  .cfbtn { padding: 5px 11px; font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; background: rgba(14,14,14,0.88); color: rgba(240,236,228,0.55); border: 0.5px solid rgba(255,255,255,0.18); border-radius: 4px; cursor: pointer; backdrop-filter: blur(4px); transition: all 0.12s; }
+  .cfbtn.active { color: #f0ece4; border-color: rgba(255,255,255,0.5); }
+  .cfbtn[data-cat="all"].active { background: rgba(240,236,228,0.12); }
+  .cfbtn[data-cat="architecture"].active { background: rgba(255,165,80,0.18); border-color: rgba(255,165,80,0.6); color: #ffb060; }
+  .cfbtn[data-cat="hotel"].active { background: rgba(120,200,255,0.14); border-color: rgba(120,200,255,0.5); color: #78c8ff; }
+  .cfbtn[data-cat="culture"].active { background: rgba(200,120,255,0.14); border-color: rgba(200,120,255,0.5); color: #c878ff; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Santiago City Guide</h1>
+  <span class="sub">Architecture · Hotels · Cultural Spaces</span>
+  <div class="legend-pills">
+    <span class="pill"><span class="pill-sq" style="background:#ffb060"></span> Architecture</span>
+    <span class="pill"><span class="pill-sq" style="background:#78c8ff"></span> Hotel</span>
+    <span class="pill"><span class="pill-sq" style="background:#c878ff"></span> Culture</span>
+  </div>
+</header>
+
+<div class="layout">
+  <div id="map">
+    <div class="layer-toggle">
+      <button class="ltbtn active" id="btn-satellite" onclick="setLayer('satellite')">Satellite</button>
+      <button class="ltbtn" id="btn-street" onclick="setLayer('street')">Street</button>
+    </div>
+    <div class="cat-filters">
+      <button class="cfbtn active" data-cat="all" onclick="filterCat('all')">All</button>
+      <button class="cfbtn" data-cat="architecture" onclick="filterCat('architecture')">Architecture</button>
+      <button class="cfbtn" data-cat="hotel" onclick="filterCat('hotel')">Hotels</button>
+      <button class="cfbtn" data-cat="culture" onclick="filterCat('culture')">Culture</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="nblist" id="nblist"></div>
+    <div class="writeup">
+      <p class="wu-eyebrow">Santiago, Chile</p>
+      <p class="wu-name" id="wu-name">Select a neighbourhood</p>
+      <p class="wu-tag" id="wu-tag">Click a shaded zone, neighbourhood pin, or name in the list</p>
+      <hr class="wu-divider">
+      <p class="wu-body wu-placeholder" id="wu-body">Six neighbourhoods, six distinct registers. Hover over any diamond pin to read the write-up for that place. Click a neighbourhood to zoom in.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Neighbourhood data ────────────────────────────────────────────────────
+const hoods = [
+  {
+    id: "lastarria", name: "Lastarria", tag: "Culture & hotels", color: "#7F77DD", abbr: "La",
+    lat: -33.4368, lng: -70.6380, zoom: 16,
+    polygon: [[-33.4318,-70.6435],[-33.4318,-70.6340],[-33.4378,-70.6312],[-33.4415,-70.6340],[-33.4420,-70.6435],[-33.4395,-70.6455],[-33.4355,-70.6455]],
+    body: "Bairro Lastarria, wedged in between the art district and Parque Forestal, is where most tourists choose to stay given the concentration of cultural offerings and well-preserved baroque buildings — mainly along Merced and Monjitas. It is also centrally located with a good selection of local design hotels, including Hotel Ismael and Hotel Magnolia. Most Santiaguinos also come here for its laid-back vibe in the afternoon, which grows with buzz at sunset."
+  },
+  {
+    id: "bellavista", name: "Bellavista", tag: "Nightlife & murals", color: "#D85A30", abbr: "Be",
+    lat: -33.4300, lng: -70.6390, zoom: 16,
+    polygon: [[-33.4225,-70.6510],[-33.4225,-70.6290],[-33.4280,-70.6280],[-33.4310,-70.6300],[-33.4315,-70.6395],[-33.4310,-70.6510]],
+    body: "The first thing you will notice about Bellavista is its concentration of bars and nightclubs, which multiplied rapidly after two universities established campuses in the neighbourhood. Alongside the nightlife, the neighbourhood holds La Chascona — one of Pablo Neruda's three houses, now a museum — and Patio Bellavista, a pedestrianised courtyard complex lined with restaurants, artisan shops, and galleries. Street art climbs the walls throughout; this is where Santiago's muralists come to work large."
+  },
+  {
+    id: "centro", name: "Centro", tag: "Historic core", color: "#1D9E75", abbr: "Ce",
+    lat: -33.4420, lng: -70.6540, zoom: 15,
+    polygon: [[-33.4295,-70.6730],[-33.4295,-70.6430],[-33.4415,-70.6430],[-33.4530,-70.6480],[-33.4545,-70.6730],[-33.4480,-70.6780]],
+    body: "Centro is where the average Santiaguino works and moves through daily life. South of Avenida Libertador Bernardo O'Higgins — the Alameda — residential blocks house the working-class neighbourhoods of San Isidro and Barrio Concha y Toro. To the north are the government buildings and the Plaza de Armas: the original colonial square from which Spanish cities expanded outward, and still the symbolic centre of the city."
+  },
+  {
+    id: "providencia", name: "Providencia", tag: "Tree-lined & liveable", color: "#378ADD", abbr: "Pr",
+    lat: -33.4280, lng: -70.6100, zoom: 14,
+    polygon: [[-33.4230,-70.6310],[-33.4160,-70.5920],[-33.4160,-70.5790],[-33.4290,-70.5790],[-33.4440,-70.5820],[-33.4440,-70.6100],[-33.4415,-70.6310],[-33.4310,-70.6300]],
+    body: "Providencia is Santiago's most liveable neighbourhood in the eyes of its residents: wide, tree-lined streets, a good metro backbone, and enough restaurants and independent shops to never require leaving. Its northern edge runs along the Mapocho River and the Parque de las Esculturas; its commercial heart is Avenida Providencia itself, lined with cafés and bookshops."
+  },
+  {
+    id: "nunoa", name: "Ñuñoa / Barrio Italia", tag: "Creative & gentrified", color: "#EF9F27", abbr: "Ñu",
+    lat: -33.4490, lng: -70.6050, zoom: 15,
+    polygon: [[-33.4390,-70.6240],[-33.4390,-70.5870],[-33.4440,-70.5820],[-33.4620,-70.5820],[-33.4620,-70.6240],[-33.4500,-70.6310]],
+    body: "Barrio Italia is where you find the handcrafted leather bag shop sitting next to a handyman toolshed and car workshops. It is the archetype of the gentrified neighbourhood in Santiago, where families enjoy Sunday brunches with single-origin coffee. Avenida Italia is lined with trendy restaurants — see Lusitano for Portuguese-Chilean cooking in a rooftop courtyard, and Da Noi for the long-running Italian trattoria where the pumpkin tortellini remains the house staple."
+  },
+  {
+    id: "lascondes", name: "Las Condes", tag: "Finance & Andes views", color: "#D4537E", abbr: "LC",
+    lat: -33.4100, lng: -70.5500, zoom: 13,
+    polygon: [[-33.3900,-70.5790],[-33.3750,-70.5400],[-33.3750,-70.5000],[-33.4300,-70.4900],[-33.4600,-70.5100],[-33.4600,-70.5550],[-33.4440,-70.5820],[-33.4160,-70.5790]],
+    body: "Las Condes is Santiago's financial and diplomatic district — gleaming towers, international hotel brands, and the Costanera Center mall with its Sky Costanera observation deck, the highest point in Latin America. The Andes feel closest here, the mountains rising sharply at the neighbourhood's eastern edge. The foothills hold the Monasterio Benedictino and Parque Mahuida, two of the city's best reasons to leave the towers behind."
+  }
+];
+
+// ─── Place data ─────────────────────────────────────────────────────────────
+// Categories: architecture | hotel | culture
+// neighbourhood id must match hoods array
+const places = [
+  // ── ARCHITECTURE ──────────────────────────────────────────────────────────
+  {
+    id: "villa-portales",
+    name: "Unidad Vecinal Portales (Villa Portales)",
+    cat: "architecture",
+    neighbourhood: "centro",
+    lat: -33.4572, lng: -70.6768,
+    warn: false,
+    body: "Public housing around the world has the same goal: to provide the marginalised with a roof over their heads. For Villa Portales, the firm BVCH set out to build social housing 'for a dignified life.' Led by Fernando Castillo Velasco — one of Chile's most prominent architects and politicians — it originally began in 1954 and was completed after 12 years, housing 302 families. Villa Portales remains an active residential community today, one of Santiago's most politically engaged neighbourhoods — it sheltered left-wing residents and activists throughout the Pinochet years."
+  },
+  {
+    id: "templo-bahai",
+    name: "Templo Bahá'í",
+    cat: "architecture",
+    neighbourhood: "lascondes",
+    lat: -33.47617, lng: -70.51166,
+    warn: false,
+    body: "With its organic chrysalis form, the South American continental Bahá'í House of Worship emits an other-worldly feeling when viewed against the backdrop of the Andes. The Bahá'í faith first arrived in Chile in 1916 and a community grew in the 1940s with American missionaries. Chile was designated as the site for the South American continental temple in 1953. Construction began in 2010 and the temple opened on 19 October 2016 — the 8th and final continental Bahá'í House of Worship to be built."
+  },
+  {
+    id: "casa-diez",
+    name: "Fundación Casa de los Diez",
+    cat: "architecture",
+    neighbourhood: "providencia",
+    lat: -33.4285, lng: -70.6148,
+    warn: false,
+    body: "Casa de los Diez takes its name from a loose group of 12 multi-disciplinary artists — the leading figures of their disciplines in Chile during 1916–1924, when the house served as their gathering place. Chile's most celebrated poets — Gabriela Mistral and Pablo Neruda — were protégés of this circle. A notable tower, nicknamed El Faro Espiritual (The Spiritual Lighthouse), provides a vantage point over Santiago. In its current incarnation it houses seven creative tenants working across sound, textile, mask-making, graphic design, and music production."
+  },
+  {
+    id: "monasterio",
+    name: "Monasterio Benedictino",
+    cat: "architecture",
+    neighbourhood: "lascondes",
+    lat: -33.3839285941, lng: -70.5130323,
+    warn: false,
+    body: "After taking in breathtaking views across the landscape from the tree-lined road that leads to the building, visitors experience the Church of the Monastery of the Holy Trinity of Las Condes as a serene cave of light. Light animates an airy, predominantly white space of almost total enclosure. Visitors are welcome to attend the morning mass — the monks' Gregorian chant in that light-flooded nave is an experience unlike anything else in Santiago. Las Verbenas 7900, a short taxi ride from the city centre."
+  },
+
+  // ── HOTELS ────────────────────────────────────────────────────────────────
+  {
+    id: "hotel-luciano",
+    name: "Hotel Luciano K",
+    cat: "hotel",
+    neighbourhood: "lastarria",
+    lat: -33.4369506215, lng: -70.6363534,
+    warn: false,
+    body: "Named after its architect, Luciano Kulczewski — who built three of his most iconic buildings between 1927 and 1930 — Hotel Luciano K combines neo-Gothic and Art Deco elements in both façade and interior. The iconic gargoyle is perched on the 7th floor, overlooking pedestrians on Merced. With 38 rooms, it was the first building in Chile to have an elevator — built in 1927, the original lift still functions today. The rooftop bar is open to the public. Best for anyone who wants their accommodation to tell a story."
+  },
+  {
+    id: "hotel-ismael",
+    name: "Hotel Ismael",
+    cat: "hotel",
+    neighbourhood: "lastarria",
+    lat: -33.436476418, lng: -70.6413179,
+    warn: false,
+    body: "Despite its size — 44 rooms including a single suite — Hotel Ismael feels perfectly suited to the urban dweller. Choose one of the 22 rooms facing the lush Parque Forestal; you won't get a better view of the park anywhere else at this price point. The owner, originally from Italy, brought his interest in art straight into the hotel lobby, where rows of books on esoteric art topics line the shelves. A mural by Chilean artist Ramuntcho Matta keeps you company through the common spaces. Best for location."
+  },
+  {
+    id: "hotel-magnolia",
+    name: "Hotel Magnolia",
+    cat: "hotel",
+    neighbourhood: "lastarria",
+    lat: -33.438845034, lng: -70.64435019,
+    warn: false,
+    body: "Located in a heritage building dating back to 1929, Hotel Magnolia was carefully restored over seven years. Architect Cazú Zegers kept the main structural elements intact — brick walls, central marble staircase, Art Deco façade — while adding three additional levels and a rooftop terrace. The hotel contains 42 rooms and 3 suites, each with hand-crafted washbasins by Chilean artists. Chilean eucalyptus wood runs throughout. Awarded Le Prix Versailles 2017 (UNESCO-backed), ranking second globally in its category. Look out for the stunning lamps by British designer Tom Dixon. Huérfanos 539."
+  },
+
+  // ── CULTURAL SPACES ──────────────────────────────────────────────────────
+  {
+    id: "gam",
+    name: "GAM — Centro Cultural Gabriela Mistral",
+    cat: "culture",
+    neighbourhood: "lastarria",
+    lat: -33.4423, lng: -70.6432,
+    warn: false,
+    body: "The first thing you will notice about GAM is its copper-toned oxidised steel cladding — chosen to represent copper, Chile's most abundant natural resource. The building first hosted UNCTAD III delegates in 1972, then served as Pinochet's executive seat from 1973 to 1990. It returned to cultural life with the restoration of democracy, though a fire in 2006 destroyed 40% of the structure. Rebuilt and reopened as GAM in September 2010. Today it is a hive of activity, also housing E.N.D — Espacio Nacional Diseño — an incubator of local designers."
+  },
+  {
+    id: "matucana100",
+    name: "Centro Cultural Matucana 100 (M100)",
+    cat: "culture",
+    neighbourhood: "centro",
+    lat: -33.4468, lng: -70.6848,
+    warn: false,
+    body: "The tried-and-tested method of converting disused industrial buildings into multi-function arts spaces works here, and helped revitalise the Estación Central neighbourhood. As a non-profit, Executive Director Cristóbal Gumucio has kept its programming fresh — with series like Santiago Off, Santiago a Mil, Famfest, and Femcine. Seven main spaces include the Teatro Principal and Espacio Patricio Bunster, which screens national and international independent cinema. Having operated for over 25 years, Matucana 100 is one of Santiago's most reliable arts institutions: unpretentious, genuinely community-focused."
+  },
+  {
+    id: "espacio-diana",
+    name: "Espacio La Diana",
+    cat: "culture",
+    neighbourhood: "centro",
+    lat: -33.4508, lng: -70.6612,
+    warn: true,
+    body: "Espacio Diana is one of those rare places that is hard to capture in writing. It could be the videogame arcade machines from the 1990s sharing space with diners, or the overgrown vines hanging from everywhere in the background. It could also be the setting itself — a courtyard shared with the Church of the Sacramentinos, its Gothic tower rising above the vines. The food leans into the surroundings: Chilean comfort dishes and well-made cocktails that taste better for the strangeness of where you're eating them."
+  },
+  {
+    id: "cementerio",
+    name: "Cementerio General",
+    cat: "culture",
+    neighbourhood: "centro",
+    lat: -33.417653611, lng: -70.65000443,
+    warn: false,
+    body: "Walk through the main entrance on Avenida La Paz and the tonal shift is immediate. Ornate family mausoleums in the southern section belong to Chile's wealthiest dynasties, their Gothic and Greco-Roman façades competing for grandeur. Move north and the architecture gives way to simpler graves — Chile's wealth inequality mapped faithfully onto its dead. The cemetery's most visited point is the memorial to the victims of the Pinochet dictatorship: a long wall of names, with Salvador Allende's prominent among them. Open Mon–Sun 8:30am–5pm. Entry free. 85 hectares."
+  },
+  {
+    id: "museo-violeta",
+    name: "Museo Violeta Parra",
+    cat: "culture",
+    neighbourhood: "providencia",
+    lat: -33.4383, lng: -70.6318,
+    warn: false,
+    body: "Violeta Parra was the feminist that Chile needed before feminism became a defining force. Born in 1917, she pioneered the nueva canción genre and fused music with visual art — her embroidered burlap arpilleras earned her a solo exhibition at the Musée des Arts Décoratifs at the Louvre in 1964, making her the first South American woman to receive that distinction. The museum opened in 2015 in a purpose-built circular building by Undurraga Devés, on Avenida Vicuña Mackenna 37. On the ground floor, árboles de la música let visitors press their ears to the bark and hear Parra's recordings playing inside. Free entry."
+  }
+];
+
+// ─── Map setup ──────────────────────────────────────────────────────────────
+let activeId = null;
+let map;
+let markerEls = {};
+let polygonLayers = {};
+let placeMarkers = {};
+let activeCat = 'all';
+
+const catColors = { architecture: '#ffb060', hotel: '#78c8ff', culture: '#c878ff' };
+const catLabels = { architecture: 'Architecture', hotel: 'Hotel', culture: 'Cultural Space' };
+
+const satelliteLayer = L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  { attribution: 'Tiles © Esri', maxZoom: 19 }
+);
+const streetLayer = L.tileLayer(
+  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_3n8f_1_fe460409a7663140eb6085b3',
+  { attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19 }
+);
+
+function setLayer(t) {
+  if (t === 'satellite') { map.removeLayer(streetLayer); map.addLayer(satelliteLayer); }
+  else { map.removeLayer(satelliteLayer); map.addLayer(streetLayer); }
+  document.getElementById('btn-satellite').classList.toggle('active', t === 'satellite');
+  document.getElementById('btn-street').classList.toggle('active', t === 'street');
+}
+
+function filterCat(cat) {
+  activeCat = cat;
+  document.querySelectorAll('.cfbtn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+  places.forEach(p => {
+    const m = placeMarkers[p.id];
+    if (!m) return;
+    if (cat === 'all' || p.cat === cat) m.addTo(map);
+    else map.removeLayer(m);
+  });
+}
+
+function buildPopupHTML(p) {
+  const hood = hoods.find(h => h.id === p.neighbourhood);
+  const accentColor = hood ? hood.color : '#fff';
+  const catColor = catColors[p.cat];
+  const warnHTML = p.warn ? `<p class="pop-warn">⚠ Verify still operating before visiting.</p>` : '';
+  return `
+    <div class="pop-header">
+      <div class="pop-cat" style="color:${catColor}">${catLabels[p.cat]} · <span style="color:${accentColor}">${hood ? hood.name : ''}</span></div>
+      <div class="pop-name">${p.name}</div>
+    </div>
+    <div class="pop-body">${p.body}${warnHTML}</div>
+  `;
+}
+
+function makePlaceIcon(p) {
+  const col = catColors[p.cat];
+  const hood = hoods.find(h => h.id === p.neighbourhood);
+  const borderCol = hood ? hood.color : col;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+    <rect x="3" y="3" width="10" height="10" rx="2" fill="${col}" fill-opacity="0.9" stroke="${borderCol}" stroke-width="1.5" transform="rotate(45 8 8)"/>
+  </svg>`;
+  return L.divIcon({ html: svg, className: '', iconSize: [16, 16], iconAnchor: [8, 8], popupAnchor: [0, -10] });
+}
+
+function select(id) {
+  activeId = id;
+  const h = hoods.find(x => x.id === id);
+  document.getElementById('wu-name').textContent = h.name;
+  document.getElementById('wu-tag').textContent = h.tag;
+  const body = document.getElementById('wu-body');
+  body.textContent = h.body;
+  body.classList.remove('wu-placeholder');
+  document.querySelectorAll('.nbtn').forEach(b => b.classList.toggle('active', b.dataset.id === id));
+  Object.entries(markerEls).forEach(([mid, el]) => el.classList.toggle('active', mid === id));
+  hoods.forEach(hd => {
+    const poly = polygonLayers[hd.id];
+    if (!poly) return;
+    if (hd.id === id) {
+      poly.setStyle({ fillOpacity: 0.38, color: hd.color, weight: 2.5, opacity: 0.95, dashArray: null });
+    } else {
+      poly.setStyle({ fillOpacity: 0.07, color: hd.color, weight: 1, opacity: 0.3, dashArray: '5 3' });
+    }
+  });
+  map.flyTo([h.lat, h.lng], h.zoom, { animate: true, duration: 0.9 });
+}
+
+window.addEventListener('load', () => {
+  map = L.map('map', { center: [-33.438, -70.615], zoom: 13, zoomControl: true });
+  satelliteLayer.addTo(map);
+
+  // Neighbourhood polygons
+  hoods.forEach(h => {
+    const poly = L.polygon(h.polygon, {
+      fillColor: h.color, fillOpacity: 0.20,
+      color: h.color, weight: 1.8, opacity: 0.65, dashArray: '5 3'
+    }).addTo(map);
+    poly.on('click', () => select(h.id));
+    polygonLayers[h.id] = poly;
+  });
+
+  // Neighbourhood markers
+  hoods.forEach(h => {
+    const el = document.createElement('div');
+    el.className = 'nh-marker';
+    el.style.background = h.color;
+    el.textContent = h.abbr;
+    markerEls[h.id] = el;
+    const icon = L.divIcon({ html: el, className: '', iconSize: [32, 32], iconAnchor: [16, 16] });
+    const m = L.marker([h.lat, h.lng], { icon }).addTo(map);
+    m.on('click', () => select(h.id));
+  });
+
+  // Place pins with hover tooltips
+  places.forEach(p => {
+    const icon = makePlaceIcon(p);
+    const marker = L.marker([p.lat, p.lng], { icon });
+    marker.bindPopup(buildPopupHTML(p), {
+      maxWidth: 270,
+      className: 'place-popup',
+      closeButton: true,
+      autoClose: true
+    });
+    // Open on hover
+    marker.on('mouseover', function() { this.openPopup(); });
+    marker.addTo(map);
+    placeMarkers[p.id] = marker;
+  });
+
+  // Sidebar
+  const nblist = document.getElementById('nblist');
+  hoods.forEach(h => {
+    const btn = document.createElement('button');
+    btn.className = 'nbtn';
+    btn.dataset.id = h.id;
+    btn.innerHTML = `<span class="dot" style="background:${h.color}"></span><span class="bname">${h.name}</span><span class="btag">${h.tag}</span>`;
+    btn.addEventListener('click', () => select(h.id));
+    nblist.appendChild(btn);
+  });
+});
+</script>
+</body>
+</html>
